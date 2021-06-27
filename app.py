@@ -2,9 +2,12 @@
 import psycopg2
 from configparser import ConfigParser
 from flask import Flask, request, render_template, g, abort
+import os
 import time
+import redis
+import json
 
-def config(filename='config/database.ini', section='postgresql'):
+def config(filename='/home/flask/elastic-cache-challenge/config/database.ini', section='postgresql'):
     # create a parser
     parser = ConfigParser()
     # read config file
@@ -22,6 +25,12 @@ def config(filename='config/database.ini', section='postgresql'):
     return db
 
 def fetch(sql):
+    redis_cache = redis.Redis.from_url(os.getenv('REDIS_URL_ENDPOINT'))
+    TTL = 20
+
+    cache_hit = redis_cache.get(sql)
+    if cache_hit:
+        return json.loads(cache_hit)
     # connect to database listed in database.ini
     conn = connect()
     if(conn != None):
@@ -31,6 +40,7 @@ def fetch(sql):
         # fetch one row
         retval = cur.fetchone()
         
+        cache_set = redis_cache.setex(sql, TTL, json.dumps(retval))
         # close db connection
         cur.close() 
         conn.close()
